@@ -1,0 +1,715 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OrgAdmin
+  Agent
+  Requester
+  ReadOnly
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AccessRequestType {
+  ADD_USER_TO_GROUP
+  REMOVE_FROM_GROUP
+  RESET_MFA
+  GRANT_APP_ROLE
+}
+
+enum AccessRequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum AssetType {
+  LAPTOP
+  SERVER
+  SAAS_APP
+  LICENSE
+}
+
+enum AssetStatus {
+  IN_STOCK
+  ASSIGNED
+  RETIRED
+  LOST
+}
+
+enum NotificationType {
+  ASSIGNMENT
+  MENTION
+  SLA_AT_RISK
+  SLA_BREACHED
+  ACCESS_REQUEST
+  INVITE
+  SYSTEM
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AutoAssignStrategy {
+  ROUND_ROBIN
+  TEAM_DEFAULT
+}
+
+enum IntegrationProvider {
+  entra
+}
+
+enum IntegrationActionStatus {
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id                  String                    @id @default(cuid())
+  email               String                    @unique
+  name                String?
+  passwordHash        String?
+  image               String?
+  lastLoginAt         DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  accounts            Account[]
+  sessions            Session[]
+  memberships         OrganizationMember[]
+  requestedTickets    Ticket[]                  @relation("RequestedTickets")
+  assignedTickets     Ticket[]                  @relation("AssignedTickets")
+  ticketComments      TicketComment[]
+  ticketWatchers      TicketWatcher[]
+  ticketAttachments   TicketAttachment[]        @relation("TicketAttachmentUploader")
+  invitationsSent     Invitation[]              @relation("InvitedBy")
+  cannedResponses     CannedResponse[]          @relation("CannedResponseAuthor")
+  kbArticles          KnowledgeArticle[]        @relation("KnowledgeAuthor")
+  kbFeedback          KnowledgeFeedback[]
+  accessRequested     AccessRequest[]           @relation("AccessRequestedBy")
+  accessManager       AccessRequest[]           @relation("AccessManagerApproval")
+  accessFinalApproval AccessRequest[]           @relation("AccessFinalApproval")
+  accessAssigned      AccessRequest[]           @relation("AccessAssignedTo")
+  accessAttachments   AccessRequestAttachment[] @relation("AccessAttachmentUploader")
+  assetsAssigned      Asset[]                   @relation("AssetAssignedTo")
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference[]
+  auditLogs           AuditLog[]                @relation("AuditActor")
+  emailQueueItems     EmailQueue[]              @relation("EmailCreatedBy")
+  workflowRuns        WorkflowRun[]             @relation("WorkflowTriggeredBy")
+}
+
+model Organization {
+  id                String                    @id @default(cuid())
+  slug              String                    @unique
+  name              String
+  logoUrl           String?
+  nextTicketNumber  Int                       @default(1)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  settings          OrganizationSetting?
+  memberships       OrganizationMember[]
+  teams             Team[]
+  categories        Category[]
+  tags              Tag[]
+  tickets           Ticket[]
+  ticketComments    TicketComment[]
+  ticketAttachments TicketAttachment[]
+  ticketWatchers    TicketWatcher[]
+  ticketTags        TicketTag[]
+  slaRules          SlaRule[]
+  cannedResponses   CannedResponse[]
+  kbArticles        KnowledgeArticle[]
+  kbFeedback        KnowledgeFeedback[]
+  invitations       Invitation[]
+  accessRequests    AccessRequest[]
+  accessAttachments AccessRequestAttachment[]
+  assets            Asset[]
+  notifications     Notification[]
+  notificationPrefs NotificationPreference[]
+  emailQueueItems   EmailQueue[]
+  auditLogs         AuditLog[]
+  autoAssignRules   AutoAssignRule[]
+  workflowRuns      WorkflowRun[]
+  TeamMember        TeamMember[]
+  integrations      EntraIntegration[]
+  integrationLogs   IntegrationActionLog[]
+  jobRuns           JobRun[]
+}
+
+model OrganizationSetting {
+  id                  String       @id @default(cuid())
+  orgId               String       @unique
+  supportEmail        String?
+  notificationEmail   String?
+  timezone            String       @default("UTC")
+  brandPrimaryColor   String?      @default("#0f172a")
+  brandSecondaryColor String?      @default("#0284c7")
+  updatedAt           DateTime     @updatedAt
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model OrganizationMember {
+  id              String           @id @default(cuid())
+  orgId           String
+  userId          String
+  role            Role             @default(Requester)
+  title           String?
+  agentCapacity   Int              @default(20)
+  isManager       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamMemberships TeamMember[]
+  autoAssignState AutoAssignRule[] @relation("LastAssignedMember")
+
+  @@unique([orgId, userId])
+  @@index([orgId, role])
+}
+
+model Team {
+  id           String           @id @default(cuid())
+  orgId        String
+  name         String
+  description  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+  tickets      Ticket[]
+  autoAssign   AutoAssignRule[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model TeamMember {
+  id           String             @id @default(cuid())
+  orgId        String
+  teamId       String
+  memberId     String
+  createdAt    DateTime           @default(now())
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team         Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member       OrganizationMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, memberId])
+  @@index([orgId])
+}
+
+model Category {
+  id                String             @id @default(cuid())
+  orgId             String
+  name              String
+  description       String?
+  keywords          String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tickets           Ticket[]
+  knowledgeArticles KnowledgeArticle[]
+  autoAssignRules   AutoAssignRule[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model Tag {
+  id           String       @id @default(cuid())
+  orgId        String
+  name         String
+  color        String?
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ticketTags   TicketTag[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model Ticket {
+  id             String             @id @default(cuid())
+  orgId          String
+  number         Int
+  key            String
+  title          String
+  description    String
+  status         TicketStatus       @default(OPEN)
+  priority       TicketPriority     @default(MEDIUM)
+  requesterId    String
+  assigneeId     String?
+  teamId         String?
+  categoryId     String?
+  relatedAssetId String?
+  dueAt          DateTime?
+  breachedAt     DateTime?
+  atRisk         Boolean            @default(false)
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requester      User               @relation("RequestedTickets", fields: [requesterId], references: [id], onDelete: Restrict)
+  assignee       User?              @relation("AssignedTickets", fields: [assigneeId], references: [id], onDelete: SetNull)
+  team           Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  category       Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  relatedAsset   Asset?             @relation("TicketAsset", fields: [relatedAssetId], references: [id], onDelete: SetNull)
+  comments       TicketComment[]
+  attachments    TicketAttachment[]
+  watchers       TicketWatcher[]
+  tags           TicketTag[]
+  accessRequests AccessRequest[]
+
+  @@unique([orgId, number])
+  @@unique([orgId, key])
+  @@index([orgId, status])
+  @@index([orgId, priority])
+  @@index([orgId, assigneeId])
+  @@index([orgId, requesterId])
+}
+
+model TicketComment {
+  id           String             @id @default(cuid())
+  orgId        String
+  ticketId     String
+  authorId     String
+  body         String
+  isInternal   Boolean            @default(false)
+  mentions     Json?
+  createdAt    DateTime           @default(now())
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ticket       Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author       User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  attachments  TicketAttachment[]
+
+  @@index([orgId, ticketId])
+}
+
+model TicketAttachment {
+  id           String         @id @default(cuid())
+  orgId        String
+  ticketId     String
+  commentId    String?
+  filename     String
+  sizeBytes    Int
+  url          String
+  uploadedById String
+  createdAt    DateTime       @default(now())
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ticket       Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  comment      TicketComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  uploadedBy   User           @relation("TicketAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([orgId, ticketId])
+}
+
+model TicketWatcher {
+  id           String       @id @default(cuid())
+  orgId        String
+  ticketId     String
+  userId       String
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, userId])
+  @@index([orgId])
+}
+
+model TicketTag {
+  id           String       @id @default(cuid())
+  orgId        String
+  ticketId     String
+  tagId        String
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag          Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, tagId])
+  @@index([orgId])
+}
+
+model SlaRule {
+  id                String         @id @default(cuid())
+  orgId             String
+  priority          TicketPriority
+  responseMinutes   Int
+  resolutionMinutes Int
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  organization      Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, priority])
+  @@index([orgId])
+}
+
+model CannedResponse {
+  id           String       @id @default(cuid())
+  orgId        String
+  title        String
+  content      String
+  createdById  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  author       User         @relation("CannedResponseAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([orgId, title])
+  @@index([orgId])
+}
+
+model KnowledgeArticle {
+  id              String              @id @default(cuid())
+  orgId           String
+  categoryId      String?
+  title           String
+  slug            String
+  contentMarkdown String
+  isPublished     Boolean             @default(true)
+  authorId        String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  organization    Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category        Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author          User                @relation("KnowledgeAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  feedback        KnowledgeFeedback[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, title])
+}
+
+model KnowledgeFeedback {
+  id           String           @id @default(cuid())
+  orgId        String
+  articleId    String
+  userId       String?
+  helpful      Boolean
+  createdAt    DateTime         @default(now())
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  article      KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user         User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, articleId])
+}
+
+model Invitation {
+  id           String       @id @default(cuid())
+  orgId        String
+  email        String
+  role         Role
+  token        String       @unique
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  invitedById  String
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([orgId, email])
+}
+
+model NotificationPreference {
+  id               String       @id @default(cuid())
+  orgId            String
+  userId           String
+  emailAssignments Boolean      @default(true)
+  emailMentions    Boolean      @default(true)
+  emailSlaAlerts   Boolean      @default(true)
+  inAppEnabled     Boolean      @default(true)
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  orgId        String
+  userId       String
+  type         NotificationType
+  title        String
+  message      String
+  link         String?
+  metadata     Json?
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, userId])
+  @@index([orgId, createdAt])
+}
+
+model EmailQueue {
+  id           String       @id @default(cuid())
+  orgId        String
+  toEmail      String
+  subject      String
+  body         String
+  status       EmailStatus  @default(PENDING)
+  attempts     Int          @default(0)
+  metadata     Json?
+  sentAt       DateTime?
+  createdById  String?
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("EmailCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+}
+
+model AuditLog {
+  id           String       @id @default(cuid())
+  orgId        String
+  actorUserId  String?
+  action       String
+  entityType   String
+  entityId     String?
+  beforeData   Json?
+  afterData    Json?
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, action])
+  @@index([orgId, entityType, createdAt])
+}
+
+model AccessRequest {
+  id                String                    @id @default(cuid())
+  orgId             String
+  requestType       AccessRequestType
+  status            AccessRequestStatus       @default(SUBMITTED)
+  title             String
+  description       String
+  targetUpn         String?
+  targetGroupId     String?
+  appRoleName       String?
+  requesterId       String
+  managerApproverId String?
+  finalApproverId   String?
+  assignedToId      String?
+  relatedTicketId   String?
+  submittedAt       DateTime                  @default(now())
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  organization      Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requester         User                      @relation("AccessRequestedBy", fields: [requesterId], references: [id], onDelete: Restrict)
+  managerApprover   User?                     @relation("AccessManagerApproval", fields: [managerApproverId], references: [id], onDelete: SetNull)
+  finalApprover     User?                     @relation("AccessFinalApproval", fields: [finalApproverId], references: [id], onDelete: SetNull)
+  assignedTo        User?                     @relation("AccessAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  relatedTicket     Ticket?                   @relation(fields: [relatedTicketId], references: [id], onDelete: SetNull)
+  attachments       AccessRequestAttachment[]
+  integrationLogs   IntegrationActionLog[]
+
+  @@index([orgId, status])
+  @@index([orgId, requestType])
+}
+
+model AccessRequestAttachment {
+  id              String        @id @default(cuid())
+  orgId           String
+  accessRequestId String
+  filename        String
+  sizeBytes       Int
+  url             String
+  uploadedById    String
+  createdAt       DateTime      @default(now())
+  organization    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accessRequest   AccessRequest @relation(fields: [accessRequestId], references: [id], onDelete: Cascade)
+  uploadedBy      User          @relation("AccessAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([orgId, accessRequestId])
+}
+
+model Asset {
+  id           String       @id @default(cuid())
+  orgId        String
+  assetTag     String
+  type         AssetType
+  name         String
+  assignedToId String?
+  status       AssetStatus  @default(IN_STOCK)
+  purchaseDate DateTime?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedTo   User?        @relation("AssetAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  tickets      Ticket[]     @relation("TicketAsset")
+
+  @@unique([orgId, assetTag])
+  @@index([orgId, status])
+}
+
+model AutoAssignRule {
+  id                   String              @id @default(cuid())
+  orgId                String
+  name                 String
+  isActive             Boolean             @default(true)
+  assignmentStrategy   AutoAssignStrategy  @default(ROUND_ROBIN)
+  categoryId           String?
+  teamId               String?
+  lastAssignedMemberId String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  organization         Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category             Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  team                 Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  lastAssignedMember   OrganizationMember? @relation("LastAssignedMember", fields: [lastAssignedMemberId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, isActive])
+}
+
+model WorkflowRun {
+  id            String       @id @default(cuid())
+  orgId         String
+  runType       String
+  status        String
+  summary       String?
+  triggeredById String?
+  startedAt     DateTime     @default(now())
+  finishedAt    DateTime?
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  triggeredBy   User?        @relation("WorkflowTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, runType, startedAt])
+}
+
+model JobRun {
+  id           String        @id @default(cuid())
+  orgId        String?
+  jobType      String
+  status       String
+  startedAt    DateTime      @default(now())
+  finishedAt   DateTime?
+  message      String?
+  jsonResult   Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, startedAt])
+  @@index([jobType, startedAt])
+  @@index([status, startedAt])
+}
+
+model EntraIntegration {
+  id           String              @id @default(cuid())
+  orgId        String
+  provider     IntegrationProvider @default(entra)
+  enabled      Boolean             @default(false)
+  tenantId     String
+  clientId     String
+  clientSecret String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider])
+  @@index([orgId])
+}
+
+model IntegrationActionLog {
+  id              String                  @id @default(cuid())
+  orgId           String
+  provider        IntegrationProvider
+  action          String
+  targetUpn       String?
+  targetGroupId   String?
+  accessRequestId String?
+  status          IntegrationActionStatus
+  message         String
+  createdAt       DateTime                @default(now())
+  organization    Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accessRequest   AccessRequest?          @relation(fields: [accessRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, provider, status, createdAt])
+  @@index([orgId, accessRequestId])
+}
+
+model Permission {
+  id              String           @id @default(cuid())
+  key             String           @unique
+  description     String
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([role, permissionId])
+  @@index([permissionId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
