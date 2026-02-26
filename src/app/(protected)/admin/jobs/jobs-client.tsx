@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import { enqueueNotificationsFlushNow, enqueueSlaScanNow, enqueueWorkflowRunNow } from "@/server/actions/job-actions";
+import Link from "next/link";
 
 type JobsClientProps = {
+  canUseJobs: boolean;
   runs: Array<{
     id: string;
     jobType: string;
@@ -27,7 +29,7 @@ function formatDuration(startedAt: Date, finishedAt: Date | null) {
   return `${Math.max(0, Math.round(durationMs / 1000))}s`;
 }
 
-export function JobsClient({ runs }: JobsClientProps) {
+export function JobsClient({ canUseJobs, runs }: JobsClientProps) {
   const router = useRouter();
   const [pending, setPending] = useState<"sla" | "workflow" | "notifications" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,15 +65,26 @@ export function JobsClient({ runs }: JobsClientProps) {
           <CardTitle>Run background jobs</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button onClick={() => run("sla")} disabled={pending !== null}>
-            {pending === "sla" ? "Queueing..." : "Enqueue SLA scan"}
-          </Button>
-          <Button variant="outline" onClick={() => run("workflow")} disabled={pending !== null}>
-            {pending === "workflow" ? "Queueing..." : "Enqueue workflow run"}
-          </Button>
-          <Button variant="outline" onClick={() => run("notifications")} disabled={pending !== null}>
-            {pending === "notifications" ? "Queueing..." : "Enqueue notifications flush"}
-          </Button>
+          {canUseJobs ? (
+            <>
+              <Button onClick={() => run("sla")} disabled={pending !== null}>
+                {pending === "sla" ? "Queueing..." : "Enqueue SLA scan"}
+              </Button>
+              <Button variant="outline" onClick={() => run("workflow")} disabled={pending !== null}>
+                {pending === "workflow" ? "Queueing..." : "Enqueue workflow run"}
+              </Button>
+              <Button variant="outline" onClick={() => run("notifications")} disabled={pending !== null}>
+                {pending === "notifications" ? "Queueing..." : "Enqueue notifications flush"}
+              </Button>
+            </>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <p className="text-amber-700">Background jobs are available on the Pro plan.</p>
+              <Button asChild>
+                <Link href="/settings/billing">Upgrade to Pro</Link>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -100,6 +100,8 @@ async function main() {
       slug: "acme",
       name: "Acme Industries",
       logoUrl: "https://example.com/logos/acme.png",
+      plan: "PRO",
+      planStatus: "ACTIVE",
     },
   });
 
@@ -108,6 +110,8 @@ async function main() {
       slug: "globex",
       name: "Globex Corporation",
       logoUrl: "https://example.com/logos/globex.png",
+      plan: "FREE",
+      planStatus: "ACTIVE",
     },
   });
 

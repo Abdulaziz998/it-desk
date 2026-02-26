@@ -29,6 +29,7 @@ Runs locally at [http://localhost:3000](http://localhost:3000).
 - Knowledge Base (Markdown CRUD, full-text-ish search fallback, feedback)
 - Settings for org profile/branding, SLA rules, categories/tags, notification prefs, canned responses
 - Access Requests module with approval statuses and evidence metadata
+- Stripe billing (test mode) with plan gating: Free, Pro, Enterprise
 - Microsoft Entra ID integration mock (org-scoped config, execute access requests, integration action logs)
 - Asset management and ticket linkage
 - Workflow automation rules + manual job endpoint (`POST /api/workflows/run`)
@@ -66,6 +67,7 @@ Runs locally at [http://localhost:3000](http://localhost:3000).
 - `Asset` tracks IT inventory and can link to tickets.
 - `AutoAssignRule` + `WorkflowRun` support automation and job run history.
 - `JobRun` captures BullMQ worker execution status, timing, and output summary.
+- `Organization.plan` + `Organization.planStatus` power entitlements across modules.
 - NextAuth tables: `Account`, `Session`, `VerificationToken`.
 
 ## Project structure
@@ -75,11 +77,13 @@ src/
   app/
     (public)/login, invite, reset-password
     (protected)/dashboard, tickets, users, teams, knowledge, settings,
-                settings/integrations/entra, access-requests, assets, workflows,
+                settings/billing, settings/integrations/entra, access-requests, assets, workflows,
                 notifications, admin/status, admin/metrics, admin/audit,
                 admin/integrations/logs, admin/jobs, profile
+    pricing
     api/auth/[...nextauth], api/health, api/workflows/run,
-    api/admin/run-jobs, api/admin/seed-demo
+    api/admin/run-jobs, api/admin/seed-demo, api/admin/rbac-export,
+    api/stripe/webhook
   components/
     app/*
     ui/*
@@ -104,6 +108,10 @@ AUTH_SECRET="local-dev-super-secret-itopsdesk-2026"
 NEXTAUTH_URL="http://localhost:3000"
 REDIS_URL="redis://localhost:6379"
 ADMIN_SECRET="local-admin-secret"
+STRIPE_SECRET_KEY="sk_test_replace_me"
+STRIPE_WEBHOOK_SECRET="whsec_replace_me"
+STRIPE_PRICE_PRO_MONTHLY="price_replace_pro"
+STRIPE_PRICE_ENTERPRISE_MONTHLY="price_replace_enterprise"
 APP_ENV="local"
 DEMO_MODE="false"
 ```
@@ -131,6 +139,10 @@ Then open [http://localhost:3000](http://localhost:3000).
 - `NEXTAUTH_URL` (your deployed app URL, e.g. `https://your-app.vercel.app`)
 - `ADMIN_SECRET` (used by `/api/admin/*` protected endpoints)
 - `REDIS_URL` (recommended for BullMQ queues in production, e.g. Upstash Redis)
+- `STRIPE_SECRET_KEY` (Stripe test secret key)
+- `STRIPE_WEBHOOK_SECRET` (from Stripe webhook endpoint)
+- `STRIPE_PRICE_PRO_MONTHLY` (Stripe price ID for Pro)
+- `STRIPE_PRICE_ENTERPRISE_MONTHLY` (Stripe price ID for Enterprise)
 
 ### Optional environment variables
 
@@ -145,9 +157,12 @@ Then open [http://localhost:3000](http://localhost:3000).
 4. Deploy from GitHub on Vercel.
 5. After first deploy, run one-time demo seeding:
    - `POST /api/admin/seed-demo` with `x-admin-secret`.
-6. Verify health endpoint:
+6. Configure Stripe webhook endpoint in Stripe Dashboard:
+   - `https://your-app.vercel.app/api/stripe/webhook`
+   - events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+7. Verify health endpoint:
    - `GET /api/health` should return `db: "up"`.
-7. Login with demo accounts listed below.
+8. Login with demo accounts listed below.
 
 ### Prisma in production
 
@@ -168,6 +183,29 @@ curl -X POST "https://your-app.vercel.app/api/admin/seed-demo" \
 - Safe to run multiple times.
 - Existing demo org/users are not duplicated.
 - Response includes counts created.
+
+### Stripe billing setup and webhook testing
+
+1. In Stripe test mode, create 2 recurring prices:
+   - Pro monthly
+   - Enterprise monthly
+2. Put their IDs in:
+   - `STRIPE_PRICE_PRO_MONTHLY`
+   - `STRIPE_PRICE_ENTERPRISE_MONTHLY`
+3. Local webhook testing (Stripe CLI):
+   - `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+   - copy webhook secret to `STRIPE_WEBHOOK_SECRET`
+4. Start checkout from:
+   - `/settings/billing`
+5. After successful checkout, webhook updates:
+   - `Organization.plan`
+   - `Organization.planStatus`
+   - Stripe customer/subscription IDs
+
+Plan entitlements:
+- Free: tickets/users/knowledge base
+- Pro: Free + background jobs + Entra integration
+- Enterprise: Pro + audit retention control + RBAC export (`/api/admin/rbac-export`)
 
 ## Demo accounts
 
@@ -209,6 +247,8 @@ Password for all demo users: `DemoPass123!`
 
 - `POST /api/admin/run-jobs` (requires `x-admin-secret`)
 - `POST /api/admin/seed-demo` (requires `x-admin-secret`, idempotent demo provisioning)
+- `GET /api/admin/rbac-export` (Enterprise plan + `users.manage`)
+- `POST /api/stripe/webhook` (Stripe signed webhook endpoint)
 
 ## Background jobs
 

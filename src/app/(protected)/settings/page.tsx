@@ -88,6 +88,17 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Link href="/settings/billing" className="text-sm font-medium text-sky-700 hover:underline">
+            Manage subscription and plan entitlements
+          </Link>
+        </CardContent>
+      </Card>
+
       <SettingsClient
         org={{
           name: org?.name ?? "",

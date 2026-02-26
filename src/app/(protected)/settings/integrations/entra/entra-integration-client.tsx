@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,9 +17,10 @@ type EntraIntegrationClientProps = {
     clientSecret: string;
   };
   isConnected: boolean;
+  canUseEntra: boolean;
 };
 
-export function EntraIntegrationClient({ initialValues, isConnected }: EntraIntegrationClientProps) {
+export function EntraIntegrationClient({ initialValues, isConnected, canUseEntra }: EntraIntegrationClientProps) {
   const router = useRouter();
   const [values, setValues] = useState(initialValues);
   const [message, setMessage] = useState<string | null>(null);
@@ -66,6 +68,15 @@ export function EntraIntegrationClient({ initialValues, isConnected }: EntraInte
             </span>
           </p>
 
+          {!canUseEntra ? (
+            <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="text-amber-800">Entra integration is available on Pro and Enterprise plans.</p>
+              <Button asChild>
+                <Link href="/settings/billing">Upgrade to Pro</Link>
+              </Button>
+            </div>
+          ) : null}
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -76,6 +87,7 @@ export function EntraIntegrationClient({ initialValues, isConnected }: EntraInte
                   enabled: event.target.checked,
                 }))
               }
+              disabled={!canUseEntra}
             />
             <span>Enabled</span>
           </label>
@@ -83,11 +95,11 @@ export function EntraIntegrationClient({ initialValues, isConnected }: EntraInte
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label>Tenant ID</Label>
-              <Input value={values.tenantId} onChange={(event) => setValues((current) => ({ ...current, tenantId: event.target.value }))} />
+              <Input value={values.tenantId} onChange={(event) => setValues((current) => ({ ...current, tenantId: event.target.value }))} disabled={!canUseEntra} />
             </div>
             <div>
               <Label>Client ID</Label>
-              <Input value={values.clientId} onChange={(event) => setValues((current) => ({ ...current, clientId: event.target.value }))} />
+              <Input value={values.clientId} onChange={(event) => setValues((current) => ({ ...current, clientId: event.target.value }))} disabled={!canUseEntra} />
             </div>
             <div className="md:col-span-2">
               <Label>Client Secret</Label>
@@ -95,13 +107,16 @@ export function EntraIntegrationClient({ initialValues, isConnected }: EntraInte
                 type="password"
                 value={values.clientSecret}
                 onChange={(event) => setValues((current) => ({ ...current, clientSecret: event.target.value }))}
+                disabled={!canUseEntra}
               />
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={save}>Save integration</Button>
-            <Button variant="outline" onClick={testConnection}>
+            <Button onClick={save} disabled={!canUseEntra}>
+              Save integration
+            </Button>
+            <Button variant="outline" onClick={testConnection} disabled={!canUseEntra}>
               Test connection
             </Button>
           </div>

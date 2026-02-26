@@ -7,14 +7,28 @@ import { AppError } from "@/lib/errors";
 import { requirePermission } from "@/lib/auth/context";
 import { entraIntegrationSchema } from "@/lib/validation/schemas";
 import { runSafeAction } from "@/server/action-utils";
+import { effectivePlan, hasFeature } from "@/lib/billing/plans";
 
 const testConnectionSchema = z.object({
   tenantId: z.string().optional(),
 });
 
+async function assertEntraFeatureEnabled(orgId: string) {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { plan: true, planStatus: true },
+  });
+
+  const plan = org ? effectivePlan(org.plan, org.planStatus) : "FREE";
+  if (!hasFeature(plan, "entra")) {
+    throw new AppError("Pro plan required for Entra integration", "PLAN_GATED", 403);
+  }
+}
+
 export async function upsertEntraIntegration(input: unknown) {
   return runSafeAction("upsertEntraIntegration", async () => {
     const context = await requirePermission("settings.manage");
+    await assertEntraFeatureEnabled(context.orgId);
     const parsed = entraIntegrationSchema.safeParse(input);
 
     if (!parsed.success) {
@@ -77,6 +91,7 @@ export async function upsertEntraIntegration(input: unknown) {
 export async function testEntraConnection(input: unknown) {
   return runSafeAction("testEntraConnection", async () => {
     const context = await requirePermission("settings.manage");
+    await assertEntraFeatureEnabled(context.orgId);
     const parsed = testConnectionSchema.safeParse(input);
 
     if (!parsed.success) {

@@ -2,25 +2,46 @@ import { Role } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/context";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { effectivePlan, hasFeature } from "@/lib/billing/plans";
 
 const roleOrder: Role[] = ["OrgAdmin", "Agent", "Requester", "ReadOnly"];
 
 export default async function PermissionsMatrixPage() {
-  await requirePagePermission("users.manage");
+  const context = await requirePagePermission("users.manage");
 
-  const permissions = await prisma.permission.findMany({
-    include: {
-      rolePermissions: true,
-    },
-    orderBy: {
-      key: "asc",
-    },
-  });
+  const [org, permissions] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: context.orgId },
+      select: {
+        plan: true,
+        planStatus: true,
+      },
+    }),
+    prisma.permission.findMany({
+      include: {
+        rolePermissions: true,
+      },
+      orderBy: {
+        key: "asc",
+      },
+    }),
+  ]);
+
+  const canExport = org ? hasFeature(effectivePlan(org.plan, org.planStatus), "rbacExport") : false;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Role-Permission Matrix</CardTitle>
+        {canExport ? (
+          <Button asChild className="w-fit">
+            <Link href="/api/admin/rbac-export">Export RBAC JSON</Link>
+          </Button>
+        ) : (
+          <p className="text-sm text-amber-700">Advanced RBAC export is available on Enterprise.</p>
+        )}
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

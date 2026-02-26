@@ -89,6 +89,21 @@ enum IntegrationActionStatus {
   FAILED
 }
 
+enum OrganizationPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum OrganizationPlanStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  UNPAID
+}
+
 model User {
   id                  String                    @id @default(cuid())
   email               String                    @unique
@@ -124,53 +139,59 @@ model User {
 }
 
 model Organization {
-  id                String                    @id @default(cuid())
-  slug              String                    @unique
-  name              String
-  logoUrl           String?
-  nextTicketNumber  Int                       @default(1)
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  settings          OrganizationSetting?
-  memberships       OrganizationMember[]
-  teams             Team[]
-  categories        Category[]
-  tags              Tag[]
-  tickets           Ticket[]
-  ticketComments    TicketComment[]
-  ticketAttachments TicketAttachment[]
-  ticketWatchers    TicketWatcher[]
-  ticketTags        TicketTag[]
-  slaRules          SlaRule[]
-  cannedResponses   CannedResponse[]
-  kbArticles        KnowledgeArticle[]
-  kbFeedback        KnowledgeFeedback[]
-  invitations       Invitation[]
-  accessRequests    AccessRequest[]
-  accessAttachments AccessRequestAttachment[]
-  assets            Asset[]
-  notifications     Notification[]
-  notificationPrefs NotificationPreference[]
-  emailQueueItems   EmailQueue[]
-  auditLogs         AuditLog[]
-  autoAssignRules   AutoAssignRule[]
-  workflowRuns      WorkflowRun[]
-  TeamMember        TeamMember[]
-  integrations      EntraIntegration[]
-  integrationLogs   IntegrationActionLog[]
-  jobRuns           JobRun[]
+  id                   String                    @id @default(cuid())
+  slug                 String                    @unique
+  name                 String
+  logoUrl              String?
+  plan                 OrganizationPlan          @default(FREE)
+  planStatus           OrganizationPlanStatus    @default(ACTIVE)
+  stripeCustomerId     String?                   @unique
+  stripeSubscriptionId String?                   @unique
+  stripePriceId        String?
+  nextTicketNumber     Int                       @default(1)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  settings             OrganizationSetting?
+  memberships          OrganizationMember[]
+  teams                Team[]
+  categories           Category[]
+  tags                 Tag[]
+  tickets              Ticket[]
+  ticketComments       TicketComment[]
+  ticketAttachments    TicketAttachment[]
+  ticketWatchers       TicketWatcher[]
+  ticketTags           TicketTag[]
+  slaRules             SlaRule[]
+  cannedResponses      CannedResponse[]
+  kbArticles           KnowledgeArticle[]
+  kbFeedback           KnowledgeFeedback[]
+  invitations          Invitation[]
+  accessRequests       AccessRequest[]
+  accessAttachments    AccessRequestAttachment[]
+  assets               Asset[]
+  notifications        Notification[]
+  notificationPrefs    NotificationPreference[]
+  emailQueueItems      EmailQueue[]
+  auditLogs            AuditLog[]
+  autoAssignRules      AutoAssignRule[]
+  workflowRuns         WorkflowRun[]
+  TeamMember           TeamMember[]
+  integrations         EntraIntegration[]
+  integrationLogs      IntegrationActionLog[]
+  jobRuns              JobRun[]
 }
 
 model OrganizationSetting {
-  id                  String       @id @default(cuid())
-  orgId               String       @unique
-  supportEmail        String?
-  notificationEmail   String?
-  timezone            String       @default("UTC")
-  brandPrimaryColor   String?      @default("#0f172a")
-  brandSecondaryColor String?      @default("#0284c7")
-  updatedAt           DateTime     @updatedAt
-  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id                    String       @id @default(cuid())
+  orgId                 String       @unique
+  supportEmail          String?
+  notificationEmail     String?
+  timezone              String       @default("UTC")
+  brandPrimaryColor     String?      @default("#0f172a")
+  brandSecondaryColor   String?      @default("#0284c7")
+  auditLogRetentionDays Int          @default(90)
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 }
 
 model OrganizationMember {
